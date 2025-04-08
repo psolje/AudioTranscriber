@@ -35,6 +35,11 @@ export const insertAudioSampleSchema = createInsertSchema(audioSamples).pick({
   duration: true,
 });
 
+export const updateAudioSampleSchema = createInsertSchema(audioSamples).pick({
+  title: true,
+  transcript: true,
+});
+
 // Transcription test results model
 export const transcriptionResults = pgTable("transcription_results", {
   id: serial("id").primaryKey(),
@@ -85,6 +90,7 @@ export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
 export type InsertAudioSample = z.infer<typeof insertAudioSampleSchema>;
+export type UpdateAudioSample = z.infer<typeof updateAudioSampleSchema>;
 export type AudioSample = typeof audioSamples.$inferSelect;
 
 export type InsertTranscriptionResult = z.infer<typeof insertTranscriptionResultSchema>;
