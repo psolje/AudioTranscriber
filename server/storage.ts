@@ -11,6 +11,8 @@ import {
   TestResultWithDetails,
   TestSessionWithResults,
 } from "@shared/schema";
+import fs from "fs";
+import path from "path";
 
 export interface IStorage {
   // User operations
@@ -74,97 +76,54 @@ export class MemStorage implements IStorage {
       isAdmin: true,
     });
 
-    // Create sample audio data
-    this.createAudioSample({
-      title: "Sample 1",
-      path: "/audio-samples/sample1.wav",
-      transcript: "The quick brown fox jumps over the lazy dog near the riverbank.",
-      duration: 5,
-    });
-    this.createAudioSample({
-      title: "Sample 2",
-      path: "/audio-samples/sample2.wav",
-      transcript: "She sells seashells by the seashore, and the shells she sells are surely seashells.",
-      duration: 7,
-    });
-    this.createAudioSample({
-      title: "Sample 3",
-      path: "/audio-samples/sample3.wav",
-      transcript: "How much wood would a woodchuck chuck if a woodchuck could chuck wood?",
-      duration: 6,
-    });
-    this.createAudioSample({
-      title: "Sample 4",
-      path: "/audio-samples/sample4.wav",
-      transcript: "Peter Piper picked a peck of pickled peppers. If Peter Piper picked a peck of pickled peppers, where's the peck of pickled peppers Peter Piper picked?",
-      duration: 10,
-    });
-    this.createAudioSample({
-      title: "Sample 5",
-      path: "/audio-samples/sample5.wav",
-      transcript: "To be or not to be, that is the question. Whether 'tis nobler in the mind to suffer the slings and arrows of outrageous fortune.",
-      duration: 9,
-    });
-    this.createAudioSample({
-      title: "Sample 6",
-      path: "/audio-samples/sample6.wav",
-      transcript: "Four score and seven years ago our fathers brought forth, upon this continent, a new nation, conceived in liberty, and dedicated to the proposition that all men are created equal.",
-      duration: 12,
-    });
-    this.createAudioSample({
-      title: "Sample 7",
-      path: "/audio-samples/sample7.wav",
-      transcript: "The early bird may get the worm, but the second mouse gets the cheese in the trap.",
-      duration: 6,
-    });
-    this.createAudioSample({
-      title: "Sample 8",
-      path: "/audio-samples/sample8.wav",
-      transcript: "A journey of a thousand miles begins with a single step towards your destination.",
-      duration: 5,
-    });
-    this.createAudioSample({
-      title: "Sample 9",
-      path: "/audio-samples/sample9.wav",
-      transcript: "The rain in Spain stays mainly in the plain, but the snow in Moscow heavily falls on the square.",
-      duration: 8,
-    });
-    this.createAudioSample({
-      title: "Sample 10",
-      path: "/audio-samples/sample10.wav",
-      transcript: "All that glitters is not gold; often have you heard that told. Many a man his life hath sold but my outside to behold.",
-      duration: 10,
-    });
-    this.createAudioSample({
-      title: "Sample 11",
-      path: "/audio-samples/sample11.wav",
-      transcript: "It was the best of times, it was the worst of times, it was the age of wisdom, it was the age of foolishness.",
-      duration: 9,
-    });
-    this.createAudioSample({
-      title: "Sample 12",
-      path: "/audio-samples/sample12.wav",
-      transcript: "Ask not what your country can do for you, ask what you can do for your country in these trying times.",
-      duration: 7,
-    });
-    this.createAudioSample({
-      title: "Sample 13",
-      path: "/audio-samples/sample13.wav",
-      transcript: "Yesterday is history, tomorrow is a mystery, but today is a gift. That is why it is called the present.",
-      duration: 8,
-    });
-    this.createAudioSample({
-      title: "Sample 14",
-      path: "/audio-samples/sample14.wav",
-      transcript: "Life is like a box of chocolates, you never know what you're going to get when you open it.",
-      duration: 6,
-    });
-    this.createAudioSample({
-      title: "Sample 15",
-      path: "/audio-samples/sample15.wav",
-      transcript: "I have a dream that one day this nation will rise up and live out the true meaning of its creed.",
-      duration: 7,
-    });
+    // Find and load existing audio files
+    this.loadAudioSamplesFromFileSystem();
+  }
+
+  /**
+   * Load audio samples from the file system
+   * This ensures database only has entries for files that actually exist
+   */
+  private loadAudioSamplesFromFileSystem() {
+    const audioSamplesDir = './public/audio-samples';
+    const defaultTranscripts = {
+      "default": "Please transcribe this audio sample as accurately as possible.",
+    };
+    
+    if (!fs.existsSync(audioSamplesDir)) {
+      console.log(`Audio samples directory not found: ${audioSamplesDir}`);
+      return;
+    }
+    
+    try {
+      const files = fs.readdirSync(audioSamplesDir);
+      
+      // Only load .wav files (skip .gitkeep and other non-audio files)
+      const audioFiles = files.filter(file => file.endsWith('.wav'));
+      
+      console.log(`Found ${audioFiles.length} audio files in ${audioSamplesDir}`);
+      
+      // Add each existing file to the database
+      audioFiles.forEach(file => {
+        // Extract filename without extension for use as title
+        const title = file.replace('.wav', '');
+        
+        // Use a generic transcript
+        const transcript = defaultTranscripts.default;
+        
+        // Default duration in seconds
+        const duration = 5;
+        
+        this.createAudioSample({
+          title: title,
+          path: `/audio-samples/${file}`,
+          transcript: transcript,
+          duration: duration,
+        });
+      });
+    } catch (error) {
+      console.error("Error loading audio samples:", error);
+    }
   }
 
   // User operations
@@ -271,11 +230,18 @@ export class MemStorage implements IStorage {
   // Test session operations
   async createTestSession(session: InsertTestSession): Promise<TestSession> {
     const id = this.currentSessionId++;
+    
+    // Ensure sampleIds is properly converted to a number array
+    let sampleIds: number[] = [];
+    if (Array.isArray(session.sampleIds)) {
+      sampleIds = session.sampleIds.map(id => typeof id === 'number' ? id : parseInt(id.toString()));
+    }
+    
     const testSession: TestSession = { 
       id,
       userId: session.userId,
       testMode: session.testMode,
-      sampleIds: Array.isArray(session.sampleIds) ? session.sampleIds : [],
+      sampleIds: sampleIds,
       avgAccuracy: null, 
       avgWpm: null,
       completed: false,
