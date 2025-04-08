@@ -1,5 +1,5 @@
-import React, { useRef, useEffect } from "react";
-import { FileMusic } from "lucide-react";
+import React, { useRef, useEffect, useState } from "react";
+import { FileMusic, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AudioPlayerProps {
@@ -18,36 +18,64 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   autoPlay = false,
 }) => {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [formattedSrc, setFormattedSrc] = useState("");
   
   // Format the source URL properly to ensure it loads correctly
-  const getFormattedSrc = () => {
+  const getFormattedSrc = (source: string) => {
     // If it's already a complete URL, return as is
-    if (src.startsWith('http')) return src;
+    if (source.startsWith('http')) return source;
     
-    // If it starts with a slash, use it as-is (relative to root)
-    if (src.startsWith('/')) return src;
+    // For relative paths, ensure they're properly formatted for browser
+    if (source.startsWith('/')) {
+      // Remove leading slash
+      return source.substring(1);
+    }
     
-    // Otherwise, add a leading slash
-    return `/${src}`;
+    return source;
   };
 
   useEffect(() => {
+    const formatted = getFormattedSrc(src);
+    console.log("Audio source:", src);
+    console.log("Formatted source:", formatted);
+    setFormattedSrc(formatted);
+    
     const audio = audioRef.current;
     if (!audio) return;
+    
+    const handleError = (e: Event) => {
+      console.error("Audio error:", e);
+      if (audio.error) {
+        console.error("Audio error code:", audio.error.code);
+        console.error("Audio error message:", audio.error.message);
+      }
+      setError("Unable to play audio. This file may be corrupted or in an unsupported format.");
+    };
+    
+    const handleCanPlay = () => {
+      console.log("Audio can play now");
+      setError(null);
+    };
 
     const handlePlay = () => {
+      console.log("Audio playing");
       onPlay();
     };
 
     const handlePause = () => {
+      console.log("Audio paused");
       onPause();
     };
 
     const handleEnded = () => {
+      console.log("Audio ended");
       onPause();
     };
 
     // Add event listeners
+    audio.addEventListener("error", handleError);
+    audio.addEventListener("canplay", handleCanPlay);
     audio.addEventListener("play", handlePlay);
     audio.addEventListener("pause", handlePause);
     audio.addEventListener("ended", handleEnded);
@@ -63,11 +91,13 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
     }
 
     return () => {
+      audio.removeEventListener("error", handleError);
+      audio.removeEventListener("canplay", handleCanPlay);
       audio.removeEventListener("play", handlePlay);
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("ended", handleEnded);
     };
-  }, [autoPlay, onPlay, onPause, onRestart]);
+  }, [src, autoPlay, onPlay, onPause, onRestart]);
 
   // Handle restart functionality
   const handleRestart = () => {
@@ -96,6 +126,12 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
         </button>
       </div>
       
+      {/* Debug info */}
+      <div className="text-xs mb-2 p-2 bg-gray-50 rounded-md">
+        <p><strong>Original path:</strong> {src}</p>
+        <p><strong>Formatted path:</strong> {formattedSrc}</p>
+      </div>
+      
       {/* Simple audio visualization */}
       <div className="w-full h-12 bg-neutral-100 rounded-md mb-4 overflow-hidden flex items-center justify-center">
         <div className={cn("flex items-center justify-center space-x-1")}>
@@ -113,13 +149,27 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
       </div>
       
       {/* Native Audio Element with controls */}
-      <audio
-        ref={audioRef}
-        src={getFormattedSrc()}
-        controls
-        preload="auto"
-        className="w-full"
-      />
+      {!error ? (
+        <audio
+          ref={audioRef}
+          src={formattedSrc}
+          controls
+          preload="auto"
+          className="w-full"
+        />
+      ) : (
+        <div className="w-full p-3 border rounded-md bg-red-50 text-red-500 flex items-center mb-3">
+          <AlertCircle className="h-4 w-4 mr-2" />
+          <span className="text-sm">{error}</span>
+        </div>
+      )}
+      
+      {/* Direct link fallback */}
+      <div className="mt-2">
+        <a href={formattedSrc} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline">
+          Try direct download/play in new tab
+        </a>
+      </div>
       
       {/* Audio Information */}
       <div className="mt-4 text-xs text-muted-foreground">
