@@ -3,6 +3,7 @@ import {
   InsertUser,
   AudioSample,
   InsertAudioSample,
+  UpdateAudioSample,
   TranscriptionResult,
   InsertTranscriptionResult,
   TestSession,
@@ -25,6 +26,7 @@ export interface IStorage {
   getAudioSamples(): Promise<AudioSample[]>;
   getAudioSample(id: number): Promise<AudioSample | undefined>;
   createAudioSample(sample: InsertAudioSample): Promise<AudioSample>;
+  updateAudioSample(id: number, updates: UpdateAudioSample): Promise<AudioSample>;
   deleteAudioSample(id: number): Promise<void>;
   getRandomAudioSamples(count: number): Promise<AudioSample[]>;
 
@@ -48,43 +50,55 @@ export interface IStorage {
   }): Promise<TestSessionWithResults[]>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<number, User>;
-  private audioSamples: Map<number, AudioSample>;
-  private transcriptionResults: Map<number, TranscriptionResult>;
-  private testSessions: Map<number, TestSession>;
-  private currentUserId: number;
-  private currentSampleId: number;
-  private currentResultId: number;
-  private currentSessionId: number;
+import { db } from "./db";
+import { eq, like, and, gte, sql } from "drizzle-orm";
+import { users, audioSamples, transcriptionResults, testSessions } from "@shared/schema";
+import createMemoryStore from "memorystore";
+import session from "express-session";
+
+const MemoryStore = createMemoryStore(session);
+
+export class DatabaseStorage implements IStorage {
+  sessionStore: session.Store;
 
   constructor() {
-    this.users = new Map();
-    this.audioSamples = new Map();
-    this.transcriptionResults = new Map();
-    this.testSessions = new Map();
-    this.currentUserId = 1;
-    this.currentSampleId = 1;
-    this.currentResultId = 1;
-    this.currentSessionId = 1;
-
-    // Create admin user
-    this.createUser({
-      name: "Admin User",
-      email: "admin@example.com",
-      password: "admin123",
-      isAdmin: true,
+    this.sessionStore = new MemoryStore({
+      checkPeriod: 86400000, // prune expired entries every 24h
     });
+    
+    // Initialize database with required data
+    this.initializeDatabase();
+  }
 
-    // Find and load existing audio files
-    this.loadAudioSamplesFromFileSystem();
+  /**
+   * Initialize the database with required data like admin user and audio samples
+   */
+  private async initializeDatabase() {
+    try {
+      // Check if admin user exists, create if not
+      const adminUser = await this.getUserByEmail("admin@example.com");
+      if (!adminUser) {
+        await this.createUser({
+          name: "Admin User",
+          email: "admin@example.com",
+          password: "admin123",
+          isAdmin: true,
+        });
+        console.log("Created admin user");
+      }
+
+      // Load audio samples from the file system
+      await this.loadAudioSamplesFromFileSystem();
+    } catch (error) {
+      console.error("Error initializing database:", error);
+    }
   }
 
   /**
    * Load audio samples from the file system
    * This ensures database only has entries for files that actually exist
    */
-  private loadAudioSamplesFromFileSystem() {
+  private async loadAudioSamplesFromFileSystem() {
     const audioSamplesDir = './public/audio-samples';
     const defaultTranscripts = {
       "default": "Please transcribe this audio sample as accurately as possible.",
@@ -103,8 +117,19 @@ export class MemStorage implements IStorage {
       
       console.log(`Found ${audioFiles.length} audio files in ${audioSamplesDir}`);
       
-      // Add each existing file to the database
-      audioFiles.forEach(file => {
+      // Get existing audio samples
+      const existingSamples = await this.getAudioSamples();
+      const existingPaths = new Set(existingSamples.map(sample => sample.path));
+      
+      // Add each file to the database if it doesn't exist
+      for (const file of audioFiles) {
+        const path = `audio-samples/${file}`;
+        
+        // Skip if this file is already in the database
+        if (existingPaths.has(path)) {
+          continue;
+        }
+        
         // Extract filename without extension for use as title
         const title = file.replace(/\.(mp3|wav)$/, '');
         
@@ -114,13 +139,15 @@ export class MemStorage implements IStorage {
         // Default duration in seconds
         const duration = 5;
         
-        this.createAudioSample({
+        await this.createAudioSample({
           title: title,
-          path: `audio-samples/${file}`,  // Remove leading slash for consistent path handling
+          path: path,
           transcript: transcript,
           duration: duration,
         });
-      });
+        
+        console.log(`Added audio sample: ${title}`);
+      }
     } catch (error) {
       console.error("Error loading audio samples:", error);
     }
@@ -128,27 +155,21 @@ export class MemStorage implements IStorage {
 
   // User operations
   async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.email.toLowerCase() === email.toLowerCase(),
-    );
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(sql`LOWER(${users.email})`, email.toLowerCase()));
+    return user;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = this.currentUserId++;
-    const user: User = { 
-      id, 
-      name: insertUser.name,
-      email: insertUser.email,
-      isAdmin: insertUser.isAdmin || false,
-      password: insertUser.password || null,
-      createdAt: new Date() 
-    };
-    this.users.set(id, user);
-    return user;
+  async createUser(user: InsertUser): Promise<User> {
+    const [newUser] = await db.insert(users).values(user).returning();
+    return newUser;
   }
 
   async verifyAdminCredentials(email: string, password: string): Promise<User | undefined> {
@@ -161,59 +182,92 @@ export class MemStorage implements IStorage {
 
   // Audio sample operations
   async getAudioSamples(): Promise<AudioSample[]> {
-    return Array.from(this.audioSamples.values());
+    return db.select().from(audioSamples);
   }
 
   async getAudioSample(id: number): Promise<AudioSample | undefined> {
-    return this.audioSamples.get(id);
+    const [sample] = await db
+      .select()
+      .from(audioSamples)
+      .where(eq(audioSamples.id, id));
+    return sample;
   }
 
   async createAudioSample(sample: InsertAudioSample): Promise<AudioSample> {
-    const id = this.currentSampleId++;
-    const audioSample: AudioSample = { ...sample, id };
-    this.audioSamples.set(id, audioSample);
-    return audioSample;
+    const [newSample] = await db
+      .insert(audioSamples)
+      .values(sample)
+      .returning();
+    return newSample;
+  }
+
+  async updateAudioSample(id: number, updates: UpdateAudioSample): Promise<AudioSample> {
+    const [updatedSample] = await db
+      .update(audioSamples)
+      .set(updates)
+      .where(eq(audioSamples.id, id))
+      .returning();
+    
+    if (!updatedSample) {
+      throw new Error(`Audio sample with ID ${id} not found`);
+    }
+    
+    return updatedSample;
   }
 
   async deleteAudioSample(id: number): Promise<void> {
-    if (!this.audioSamples.has(id)) {
+    const result = await db
+      .delete(audioSamples)
+      .where(eq(audioSamples.id, id))
+      .returning({ id: audioSamples.id });
+    
+    if (result.length === 0) {
       throw new Error(`Audio sample with ID ${id} not found`);
     }
-    this.audioSamples.delete(id);
   }
   
   async getRandomAudioSamples(count: number): Promise<AudioSample[]> {
-    const samples = Array.from(this.audioSamples.values());
-    const shuffled = [...samples].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, count);
+    // PostgreSQL's RANDOM() function for random ordering
+    const samples = await db
+      .select()
+      .from(audioSamples)
+      .orderBy(sql`RANDOM()`)
+      .limit(count);
+    
+    return samples;
   }
 
   // Transcription result operations
   async createTranscriptionResult(result: InsertTranscriptionResult): Promise<TranscriptionResult> {
-    const id = this.currentResultId++;
-    const transcriptionResult: TranscriptionResult = { 
-      ...result, 
-      id, 
-      testDate: new Date() 
-    };
-    this.transcriptionResults.set(id, transcriptionResult);
-    return transcriptionResult;
+    const [newResult] = await db
+      .insert(transcriptionResults)
+      .values({
+        userId: result.userId,
+        sampleId: result.sampleId,
+        sessionId: result.sessionId,
+        transcription: result.transcription,
+        accuracy: result.accuracy,
+        wpm: result.wpm,
+        timeTaken: result.timeTaken
+      })
+      .returning();
+    return newResult;
   }
 
   async getTranscriptionResultsByUserId(userId: number): Promise<TranscriptionResult[]> {
-    return Array.from(this.transcriptionResults.values()).filter(
-      (result) => result.userId === userId,
-    );
+    return db
+      .select()
+      .from(transcriptionResults)
+      .where(eq(transcriptionResults.userId, userId));
   }
 
   async getTranscriptionResultsBySessionId(sessionId: number): Promise<TestResultWithDetails[]> {
     const session = await this.getTestSession(sessionId);
     if (!session) return [];
 
-    const results = Array.from(this.transcriptionResults.values()).filter(
-      (result) => result.userId === session.userId && 
-                 session.sampleIds.includes(result.sampleId)
-    );
+    const results = await db.select()
+      .from(transcriptionResults)
+      .where(eq(transcriptionResults.sessionId, sessionId));
 
     return Promise.all(
       results.map(async (result) => {
@@ -229,58 +283,65 @@ export class MemStorage implements IStorage {
 
   // Test session operations
   async createTestSession(session: InsertTestSession): Promise<TestSession> {
-    const id = this.currentSessionId++;
+    // Use the pg Pool directly to avoid Drizzle ORM type issues with JSON
+    const query = `
+      INSERT INTO test_sessions (user_id, test_mode, sample_ids)
+      VALUES ($1, $2, $3)
+      RETURNING *
+    `;
     
-    // Ensure sampleIds is properly converted to a number array
-    let sampleIds: number[] = [];
-    if (Array.isArray(session.sampleIds)) {
-      sampleIds = session.sampleIds.map((idVal: any) => {
-        if (typeof idVal === 'number') return idVal;
-        if (typeof idVal === 'string') return parseInt(idVal);
-        return 0; // fallback
-      }).filter(idVal => !isNaN(idVal)); // Filter out any NaN values
-    }
+    const values = [
+      session.userId,
+      session.testMode,
+      JSON.stringify(Array.isArray(session.sampleIds) ? session.sampleIds : [])
+    ];
     
-    const testSession: TestSession = { 
-      id,
-      userId: session.userId,
-      testMode: session.testMode,
-      sampleIds: sampleIds,
-      avgAccuracy: null, 
-      avgWpm: null,
-      completed: false,
-      testDate: new Date() 
-    };
-    this.testSessions.set(id, testSession);
-    return testSession;
+    // Use the executeQuery function from db.ts
+    const { executeQuery } = await import('./db');
+    const result = await executeQuery(query, values);
+    return result.rows[0] as TestSession;
   }
 
   async getTestSession(id: number): Promise<TestSession | undefined> {
-    return this.testSessions.get(id);
+    const [session] = await db
+      .select()
+      .from(testSessions)
+      .where(eq(testSessions.id, id));
+    
+    return session;
   }
 
   async getTestSessionsByUserId(userId: number): Promise<TestSession[]> {
-    return Array.from(this.testSessions.values()).filter(
-      (session) => session.userId === userId,
-    );
+    return db
+      .select()
+      .from(testSessions)
+      .where(eq(testSessions.userId, userId));
   }
 
   async updateTestSession(id: number, updates: UpdateTestSession): Promise<TestSession> {
-    const session = this.testSessions.get(id);
-    if (!session) {
+    const [updatedSession] = await db
+      .update(testSessions)
+      .set(updates)
+      .where(eq(testSessions.id, id))
+      .returning();
+    
+    if (!updatedSession) {
       throw new Error(`Test session with ID ${id} not found`);
     }
-
-    const updatedSession = { ...session, ...updates };
-    this.testSessions.set(id, updatedSession);
+    
     return updatedSession;
   }
 
   async getAllTestSessions(limit = 10, offset = 0): Promise<TestSessionWithResults[]> {
-    const sessions = Array.from(this.testSessions.values())
-      .sort((a, b) => b.testDate.getTime() - a.testDate.getTime())
-      .slice(offset, offset + limit);
+    // Get sessions with pagination
+    const sessions = await db
+      .select()
+      .from(testSessions)
+      .orderBy(sql`${testSessions.testDate} DESC`)
+      .limit(limit)
+      .offset(offset);
 
+    // Fetch additional data for each session
     return Promise.all(
       sessions.map(async (session) => {
         const user = await this.getUser(session.userId);
@@ -299,7 +360,7 @@ export class MemStorage implements IStorage {
   }
 
   async getTestSessionWithResults(id: number): Promise<TestSessionWithResults | undefined> {
-    const session = this.testSessions.get(id);
+    const session = await this.getTestSession(id);
     if (!session) return undefined;
 
     const user = await this.getUser(session.userId);
@@ -316,7 +377,11 @@ export class MemStorage implements IStorage {
   }
 
   async getTestSessionsCount(): Promise<number> {
-    return this.testSessions.size;
+    const [result] = await db
+      .select({ count: sql`COUNT(*)` })
+      .from(testSessions);
+    
+    return Number(result?.count || 0);
   }
 
   async getTestSessionsByFilter(filter: {
@@ -324,34 +389,71 @@ export class MemStorage implements IStorage {
     date?: string;
     minScore?: number;
   }): Promise<TestSessionWithResults[]> {
-    const sessions = await this.getAllTestSessions(100, 0); // Get all sessions with a large limit
+    // Build filter conditions for SQL query
+    let conditions = [];
+    let params: any[] = [];
+    let paramIndex = 1;
     
-    return sessions.filter(session => {
-      // Filter by name if provided
-      if (filter.name && !session.user.name.toLowerCase().includes(filter.name.toLowerCase())) {
-        return false;
-      }
+    // Handle name filter
+    if (filter.name) {
+      const nameFilter = `%${filter.name.toLowerCase()}%`;
+      conditions.push(`EXISTS (
+        SELECT 1 FROM users 
+        WHERE users.id = test_sessions.user_id 
+        AND LOWER(users.name) LIKE $${paramIndex}
+      )`);
+      params.push(nameFilter);
+      paramIndex++;
+    }
+    
+    // Handle date filter
+    if (filter.date) {
+      const date = new Date(filter.date);
+      date.setHours(0, 0, 0, 0);
+      const nextDay = new Date(date);
+      nextDay.setDate(nextDay.getDate() + 1);
       
-      // Filter by date if provided
-      if (filter.date) {
-        const filterDate = new Date(filter.date);
-        const sessionDate = new Date(session.testDate);
+      conditions.push(`test_date >= $${paramIndex} AND test_date < $${paramIndex + 1}`);
+      params.push(date, nextDay);
+      paramIndex += 2;
+    }
+    
+    // Handle minimum score filter
+    if (filter.minScore) {
+      conditions.push(`avg_accuracy IS NOT NULL AND avg_accuracy >= $${paramIndex}`);
+      params.push(filter.minScore);
+      paramIndex++;
+    }
+    
+    // Build and execute the query
+    let query = `
+      SELECT * FROM test_sessions
+      ${conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : ''}
+      ORDER BY test_date DESC
+    `;
+    
+    // Use the executeQuery function from db.ts
+    const { executeQuery } = await import('./db');
+    const result = await executeQuery(query, params);
+    const sessions = result.rows as TestSession[];
+    
+    // Fetch additional data for each session
+    return Promise.all(
+      sessions.map(async (session) => {
+        const user = await this.getUser(session.userId);
+        const results = await this.getTranscriptionResultsBySessionId(session.id);
         
-        if (filterDate.getFullYear() !== sessionDate.getFullYear() ||
-            filterDate.getMonth() !== sessionDate.getMonth() ||
-            filterDate.getDate() !== sessionDate.getDate()) {
-          return false;
-        }
-      }
-      
-      // Filter by minimum score if provided
-      if (filter.minScore && session.avgAccuracy && session.avgAccuracy < filter.minScore) {
-        return false;
-      }
-      
-      return true;
-    });
+        return {
+          ...session,
+          user: {
+            name: user?.name || "Unknown User",
+            email: user?.email || "unknown@example.com",
+          },
+          results,
+        };
+      })
+    );
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();

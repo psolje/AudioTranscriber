@@ -4,12 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AudioPlayer } from '@/components/ui/audio-player';
-import { Plus, Trash2, Play, Pause } from 'lucide-react';
+import { Plus, Trash2, Play, Pause, Edit, X } from 'lucide-react';
 import { queryClient } from '@/lib/queryClient';
 import { formatTime } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import AudioUpload from './audio-upload';
+import { AudioSampleEditor } from './audio-sample-editor';
 
 interface AudioSample {
   id: number;
@@ -22,6 +23,8 @@ interface AudioSample {
 export const AudioSamplesManager: React.FC = () => {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
   const [currentPlayingId, setCurrentPlayingId] = useState<number | null>(null);
+  const [editingSample, setEditingSample] = useState<AudioSample | null>(null);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const { toast } = useToast();
 
   const { data: audioSamples, isLoading, refetch } = useQuery<AudioSample[]>({
@@ -70,6 +73,17 @@ export const AudioSamplesManager: React.FC = () => {
   const handleUploadSuccess = () => {
     setIsUploadDialogOpen(false);
     refetch();
+  };
+  
+  const handleEditSample = (sample: AudioSample) => {
+    setEditingSample(sample);
+    setIsEditDialogOpen(true);
+  };
+  
+  const handleUpdateSample = (updatedSample: AudioSample) => {
+    setIsEditDialogOpen(false);
+    setEditingSample(null);
+    queryClient.invalidateQueries({ queryKey: ['/api/audio-samples'] });
   };
 
   return (
@@ -138,7 +152,14 @@ export const AudioSamplesManager: React.FC = () => {
                       ? `${sample.transcript.substring(0, 60)}...` 
                       : sample.transcript}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEditSample(sample)}
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
                     <Button
                       variant="destructive"
                       size="sm"
@@ -162,6 +183,25 @@ export const AudioSamplesManager: React.FC = () => {
           {audioSamples ? audioSamples.length : 0} audio samples available
         </p>
       </CardFooter>
+
+      {/* Edit Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Edit Audio Sample</DialogTitle>
+            <DialogDescription>
+              Update the title or transcript for this audio sample
+            </DialogDescription>
+          </DialogHeader>
+          {editingSample && (
+            <AudioSampleEditor
+              sample={editingSample}
+              onUpdate={handleUpdateSample}
+              onCancel={() => setIsEditDialogOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 };
