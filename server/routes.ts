@@ -1,14 +1,12 @@
-import express, { type Express, Request, Response, NextFunction } from "express";
+import express, { type Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated, isAdmin } from "./auth";
 import {
   insertUserSchema,
   insertTranscriptionResultSchema,
   insertTestSessionSchema,
   updateTestSessionSchema,
   insertAudioSampleSchema,
-  updateAudioSampleSchema,
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
@@ -18,25 +16,6 @@ import fs from "fs";
 import { convertToMP3, isMP3, getAudioDuration } from "./audio-utils";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Set up authentication with Passport
-  setupAuth(app);
-  
-  // Middleware to protect routes that require authentication
-  const requireAuth = (req: Request, res: Response, next: NextFunction) => {
-    if (!isAuthenticated(req)) {
-      return res.status(401).json({ message: "Authentication required" });
-    }
-    next();
-  };
-  
-  // Middleware to protect admin routes
-  const requireAdmin = (req: Request, res: Response, next: NextFunction) => {
-    if (!isAdmin(req)) {
-      return res.status(403).json({ message: "Admin access required" });
-    }
-    next();
-  };
-  
   // Serve static audio files from public/audio-samples
   app.use('/audio-samples', express.static(path.join('./public/audio-samples')));
   // Configure multer for audio file uploads
@@ -158,11 +137,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Test session routes - require authentication
-  app.post("/api/test-sessions", requireAuth, async (req: Request, res: Response) => {
-    // Add user ID from authenticated user
-    const requestData = { ...req.body, userId: req.user!.id };
-    const { data, error } = validateRequest(insertTestSessionSchema, requestData);
+  // Test session routes
+  app.post("/api/test-sessions", async (req: Request, res: Response) => {
+    const { data, error } = validateRequest(insertTestSessionSchema, req.body);
     if (error) return res.status(400).json({ message: error });
 
     try {
@@ -173,7 +150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/test-sessions/:id", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/test-sessions/:id", async (req: Request, res: Response) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       return res.status(400).json({ message: "Invalid session ID" });
@@ -184,19 +161,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!session) {
         return res.status(404).json({ message: "Test session not found" });
       }
-      
-      // Ensure user can only access their own sessions (unless admin)
-      if (session.userId !== req.user!.id && !req.user!.isAdmin) {
-        return res.status(403).json({ message: "You don't have permission to access this session" });
-      }
-      
       res.status(200).json(session);
     } catch (error) {
       res.status(500).json({ message: "Error fetching test session" });
     }
   });
 
-  app.patch("/api/test-sessions/:id", requireAuth, async (req: Request, res: Response) => {
+  app.patch("/api/test-sessions/:id", async (req: Request, res: Response) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       return res.status(400).json({ message: "Invalid session ID" });
@@ -206,29 +177,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (error) return res.status(400).json({ message: error });
 
     try {
-      // Check if user has permission to update this session
-      const session = await storage.getTestSession(id);
-      if (!session) {
-        return res.status(404).json({ message: "Test session not found" });
-      }
-      
-      // Ensure user can only update their own sessions (unless admin)
-      if (session.userId !== req.user!.id && !req.user!.isAdmin) {
-        return res.status(403).json({ message: "You don't have permission to update this session" });
-      }
-      
-      const updatedSession = await storage.updateTestSession(id, data);
-      res.status(200).json(updatedSession);
+      const session = await storage.updateTestSession(id, data);
+      res.status(200).json(session);
     } catch (error) {
       res.status(500).json({ message: "Error updating test session" });
     }
   });
 
-  // Transcription result routes - require authentication
-  app.post("/api/transcription-results", requireAuth, async (req: Request, res: Response) => {
-    // Add user ID from authenticated user
-    const requestData = { ...req.body, userId: req.user!.id };
-    const { data, error } = validateRequest(insertTranscriptionResultSchema, requestData);
+  // Transcription result routes
+  app.post("/api/transcription-results", async (req: Request, res: Response) => {
+    const { data, error } = validateRequest(insertTranscriptionResultSchema, req.body);
     if (error) return res.status(400).json({ message: error });
 
     try {
@@ -239,27 +197,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get results for the current authenticated user
-  app.get("/api/users/me/results", requireAuth, async (req: Request, res: Response) => {
-    try {
-      const userId = req.user!.id;
-      const results = await storage.getTranscriptionResultsByUserId(userId);
-      res.status(200).json(results);
-    } catch (error) {
-      res.status(500).json({ message: "Error fetching your results" });
-    }
-  });
-  
-  // Admin can access any user's results
-  app.get("/api/users/:userId/results", requireAuth, async (req: Request, res: Response) => {
+  app.get("/api/users/:userId/results", async (req: Request, res: Response) => {
     const userId = parseInt(req.params.userId);
     if (isNaN(userId)) {
       return res.status(400).json({ message: "Invalid user ID" });
-    }
-    
-    // Only admins or the user themselves can access results
-    if (userId !== req.user!.id && !req.user!.isAdmin) {
-      return res.status(403).json({ message: "You don't have permission to access these results" });
     }
 
     try {
@@ -270,8 +211,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin dashboard routes - require admin access
-  app.get("/api/admin/test-sessions", requireAdmin, async (req: Request, res: Response) => {
+  // Admin dashboard routes
+  app.get("/api/admin/test-sessions", async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 10;
     const offset = parseInt(req.query.offset as string) || 0;
 
@@ -284,7 +225,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/admin/test-sessions/filter", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/test-sessions/filter", async (req: Request, res: Response) => {
     const name = req.query.name as string;
     const date = req.query.date as string;
     const minScore = req.query.minScore ? parseInt(req.query.minScore as string) : undefined;
@@ -301,7 +242,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/admin/test-sessions/:id", requireAdmin, async (req: Request, res: Response) => {
+  app.get("/api/admin/test-sessions/:id", async (req: Request, res: Response) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       return res.status(400).json({ message: "Invalid session ID" });
@@ -318,37 +259,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Admin audio sample management - Update
-  app.patch("/api/admin/audio-samples/:id", requireAdmin, async (req: Request, res: Response) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) {
-      return res.status(400).json({ message: "Invalid sample ID" });
-    }
-
-    const { data, error } = validateRequest(updateAudioSampleSchema, req.body);
-    if (error) return res.status(400).json({ message: error });
-
-    try {
-      // Check if the sample exists
-      const sample = await storage.getAudioSample(id);
-      if (!sample) {
-        return res.status(404).json({ message: "Audio sample not found" });
-      }
-
-      // Update the audio sample
-      const updatedSample = await storage.updateAudioSample(id, data);
-      res.status(200).json(updatedSample);
-    } catch (error) {
-      console.error("Error updating audio sample:", error);
-      res.status(500).json({ 
-        message: "Error updating audio sample",
-        error: (error as Error).message 
-      });
-    }
-  });
-
-  // Admin audio sample management - Create
-  app.post("/api/admin/audio-samples", requireAdmin, upload.single('audioFile'), async (req: Request, res: Response) => {
+  // Admin audio sample management
+  app.post("/api/admin/audio-samples", upload.single('audioFile'), async (req: Request, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No audio file uploaded" });
@@ -422,7 +334,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete audio sample
-  app.delete("/api/admin/audio-samples/:id", requireAdmin, async (req: Request, res: Response) => {
+  app.delete("/api/admin/audio-samples/:id", async (req: Request, res: Response) => {
     const id = parseInt(req.params.id);
     if (isNaN(id)) {
       return res.status(400).json({ message: "Invalid sample ID" });
@@ -452,16 +364,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get admin credentials - only available in development mode
-  app.get("/api/admin/credentials", (req: Request, res: Response) => {
-    if (process.env.NODE_ENV === 'production') {
-      return res.status(404).json({ message: "Endpoint not available in production" });
-    }
-    
+  // Get admin credentials
+  app.get("/api/admin/credentials", (_req: Request, res: Response) => {
     res.status(200).json({
       email: "admin@example.com",
-      password: "admin123",
-      note: "These are development credentials only. This endpoint is disabled in production."
+      password: "admin123"
     });
   });
 

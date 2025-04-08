@@ -45,7 +45,6 @@ export const transcriptionResults = pgTable("transcription_results", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
   sampleId: integer("sample_id").notNull(),
-  sessionId: integer("session_id").notNull(),
   transcription: text("transcription").notNull(),
   accuracy: integer("accuracy").notNull(), // Percentage (0-100)
   wpm: integer("wpm").notNull(), // Words per minute
@@ -56,7 +55,6 @@ export const transcriptionResults = pgTable("transcription_results", {
 export const insertTranscriptionResultSchema = createInsertSchema(transcriptionResults).pick({
   userId: true,
   sampleId: true,
-  sessionId: true,
   transcription: true,
   accuracy: true,
   wpm: true,

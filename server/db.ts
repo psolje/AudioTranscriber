@@ -13,13 +13,3 @@ if (!process.env.DATABASE_URL) {
 
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle({ client: pool, schema });
-
-/**
- * Execute a raw SQL query with parameters
- * @param query SQL query string with $1, $2, etc. placeholders
- * @param params Parameters to bind to the query
- * @returns Query result
- */
-export async function executeQuery(query: string, params: any[] = []) {
-  return pool.query(query, params);
-}

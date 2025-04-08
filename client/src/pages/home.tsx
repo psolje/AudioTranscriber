@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useLocation } from "wouter";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth } from "@/context/auth-context";
 import { useTest } from "@/context/test-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { toast } from "@/hooks/use-toast";
 
 const Home: React.FC = () => {
   const [, setLocation] = useLocation();
-  const { login, adminLogin, register, isLoading } = useAuth();
+  const { login, adminLogin, isLoading } = useAuth();
   const { setTestMode } = useTest();
   
   const [name, setName] = useState("");
@@ -37,8 +37,17 @@ const Home: React.FC = () => {
           return;
         }
         
-        await adminLogin({ email, password });
-        // The user data is handled by the hook, we'll be redirected automatically
+        const user = await adminLogin(email, password);
+        
+        if (user) {
+          setLocation("/admin");
+        } else {
+          toast({
+            title: "Login Failed",
+            description: "Invalid admin credentials",
+            variant: "destructive",
+          });
+        }
       } else {
         // Regular user login
         if (!name || !email) {
@@ -50,7 +59,7 @@ const Home: React.FC = () => {
           return;
         }
         
-        await register({ name, email });
+        await login(name, email);
         
         // Set the test mode
         setTestMode(testModeValue as "standard" | "extended");
