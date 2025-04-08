@@ -98,15 +98,15 @@ export class MemStorage implements IStorage {
     try {
       const files = fs.readdirSync(audioSamplesDir);
       
-      // Only load .wav files (skip .gitkeep and other non-audio files)
-      const audioFiles = files.filter(file => file.endsWith('.wav'));
+      // Load audio files (mp3 and wav)
+      const audioFiles = files.filter(file => file.endsWith('.mp3') || file.endsWith('.wav'));
       
       console.log(`Found ${audioFiles.length} audio files in ${audioSamplesDir}`);
       
       // Add each existing file to the database
       audioFiles.forEach(file => {
         // Extract filename without extension for use as title
-        const title = file.replace('.wav', '');
+        const title = file.replace(/\.(mp3|wav)$/, '');
         
         // Use a generic transcript
         const transcript = defaultTranscripts.default;

@@ -13,6 +13,7 @@ import { fromZodError } from "zod-validation-error";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { convertToMP3, isMP3, getAudioDuration } from "./audio-utils";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Configure multer for audio file uploads
@@ -263,35 +264,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No audio file uploaded" });
       }
 
-      const { title, transcript, duration } = req.body;
+      const { title, transcript } = req.body;
+      let { duration } = req.body;
       
-      if (!title || !transcript || !duration) {
+      if (!title || !transcript) {
         return res.status(400).json({ 
-          message: "Title, transcript, and duration are required" 
+          message: "Title and transcript are required" 
         });
       }
 
-      const durationNum = parseInt(duration);
-      if (isNaN(durationNum)) {
-        return res.status(400).json({ message: "Duration must be a number" });
-      }
-
-      // Format path for storage - make it relative without leading slash
-      const filePath = `audio-samples/${req.file.filename}`;
+      // Get the full path to the uploaded file
+      const originalFilePath = path.join('./public', 'audio-samples', req.file.filename);
+      let finalFilePath = `audio-samples/${req.file.filename}`;
+      let durationNum = 0;
       
+      try {
+        // Check if file is MP3, convert if not
+        if (!isMP3(originalFilePath)) {
+          console.log(`File ${req.file.filename} is not MP3. Converting...`);
+          const convertedPath = await convertToMP3(originalFilePath);
+          // Update the path to point to the MP3 file (relative path for storage)
+          finalFilePath = `audio-samples/${path.basename(convertedPath)}`;
+          console.log(`Converted to ${finalFilePath}`);
+        }
+        
+        // Get the duration if not provided
+        if (!duration) {
+          const fullPath = path.join('./public', finalFilePath);
+          durationNum = await getAudioDuration(fullPath);
+          console.log(`Detected audio duration: ${durationNum} seconds`);
+        } else {
+          durationNum = parseInt(duration);
+          if (isNaN(durationNum)) {
+            // If duration is provided but invalid, detect it
+            const fullPath = path.join('./public', finalFilePath);
+            durationNum = await getAudioDuration(fullPath);
+            console.log(`Invalid duration provided. Detected: ${durationNum} seconds`);
+          }
+        }
+      } catch (conversionError: any) {
+        console.error("Error processing audio file:", conversionError);
+        return res.status(400).json({ 
+          message: "Error processing audio file. Please upload an MP3 file.",
+          error: conversionError.message
+        });
+      }
+      
+      // Create the audio sample in storage
       const audioSample = await storage.createAudioSample({
         title,
-        path: filePath,
+        path: finalFilePath,
         transcript,
         duration: durationNum
       });
       
-      res.status(201).json(audioSample);
-    } catch (error) {
+      res.status(201).json({
+        ...audioSample,
+        convertedToMP3: finalFilePath !== `audio-samples/${req.file.filename}`
+      });
+    } catch (error: any) {
       console.error("Error uploading audio:", error);
       res.status(500).json({ 
         message: "Error uploading audio sample",
-        error: (error as Error).message 
+        error: error.message 
       });
     }
   });
