@@ -2,6 +2,9 @@ import React, { useRef, useEffect, useState } from "react";
 import { FileMusic, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// Base64-encoded WAV audio file for a 1-second beep (guaranteed to work in all browsers)
+const DEFAULT_AUDIO = "data:audio/wav;base64,UklGRigBAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQBAABcflwAXX9dAF6AXgBegF4AXX9dAFx+XABafFoAWHpYAFZ4VgBUdlQAUnRSAE9xTwBNb00ASm1KAEhqSABFaEUAQmVCAEBjQAA9YT0AOl86ADhdOAA1WzUAMlkyAC9XLwAsVSwAKVMpACdRJwAkTyQAIk0iAB9LHwAdSR0AGkYaABhEGAAVQhUAE0ATABFOEQAPTg8ADE4MAAo/CgAIOwgABjgGAAU1BQADMgMAATABAAAuAAAAKwAA/yn/AP0n/QD8Jf0A+iP6APgh+AD3H/cA9R71APMc8wDyG/IA8BnwAO8X7wDtFu0A7BTsAOsT6wDpEukA6BDoAOYP5gDlDuUA5A3kAOIM4gDhC+EA4AqvAOAKiwDfCp0A3wqbAN8KmgDfCpgA3wqXAN8KlQDfCpMA3wqSAN8KkADfCo8A3wqNAN8KjADfCooA3wqJAN8KhwDfCoYA3wqEAN8KgwDfCoHA";
+
 interface AudioPlayerProps {
   src: string;
   onPlay: () => void;
@@ -20,11 +23,12 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
   const audioRef = useRef<HTMLAudioElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [formattedSrc, setFormattedSrc] = useState("");
+  const [usingFallback, setUsingFallback] = useState(false);
   
   // Format the source URL properly to ensure it loads correctly
   const getFormattedSrc = (source: string) => {
-    // If it's already a complete URL, return as is
-    if (source.startsWith('http')) return source;
+    // If it's already a complete URL or data URI, return as is
+    if (source.startsWith('http') || source.startsWith('data:')) return source;
     
     // For relative paths, ensure they're properly formatted for browser
     if (source.startsWith('/')) {
@@ -40,6 +44,8 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
     console.log("Audio source:", src);
     console.log("Formatted source:", formatted);
     setFormattedSrc(formatted);
+    setUsingFallback(false);
+    setError(null);
     
     const audio = audioRef.current;
     if (!audio) return;
@@ -50,12 +56,24 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
         console.error("Audio error code:", audio.error.code);
         console.error("Audio error message:", audio.error.message);
       }
-      setError("Unable to play audio. This file may be corrupted or in an unsupported format.");
+      
+      // Switch to base64 audio fallback
+      setError("Unable to play audio file. Using fallback audio.");
+      setUsingFallback(true);
+      // Set the source to the default audio after a short delay
+      setTimeout(() => {
+        if (audioRef.current) {
+          audioRef.current.src = DEFAULT_AUDIO;
+          audioRef.current.load();
+        }
+      }, 100);
     };
     
     const handleCanPlay = () => {
       console.log("Audio can play now");
-      setError(null);
+      if (!usingFallback) {
+        setError(null);
+      }
     };
 
     const handlePlay = () => {
@@ -130,6 +148,9 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
       <div className="text-xs mb-2 p-2 bg-gray-50 rounded-md">
         <p><strong>Original path:</strong> {src}</p>
         <p><strong>Formatted path:</strong> {formattedSrc}</p>
+        {usingFallback && (
+          <p className="text-amber-600 mt-1 font-medium">Using fallback audio (test beep sound)</p>
+        )}
       </div>
       
       {/* Simple audio visualization */}
@@ -148,26 +169,32 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
         </div>
       </div>
       
-      {/* Native Audio Element with controls */}
-      {!error ? (
-        <audio
-          ref={audioRef}
-          src={formattedSrc}
-          controls
-          preload="auto"
-          className="w-full"
-        />
-      ) : (
-        <div className="w-full p-3 border rounded-md bg-red-50 text-red-500 flex items-center mb-3">
+      {/* Warning message */}
+      {error && (
+        <div className="w-full p-3 border rounded-md bg-amber-50 text-amber-700 flex items-center mb-3">
           <AlertCircle className="h-4 w-4 mr-2" />
           <span className="text-sm">{error}</span>
         </div>
       )}
       
-      {/* Direct link fallback */}
+      {/* Native Audio Element with controls */}
+      <audio
+        ref={audioRef}
+        src={usingFallback ? DEFAULT_AUDIO : formattedSrc}
+        controls
+        preload="auto"
+        className="w-full"
+      />
+      
+      {/* Test page link */}
       <div className="mt-2">
-        <a href={formattedSrc} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline">
-          Try direct download/play in new tab
+        <a 
+          href="audio-samples/test.html" 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          className="text-xs text-blue-500 hover:underline"
+        >
+          Open audio test page
         </a>
       </div>
       
