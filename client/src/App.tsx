@@ -8,6 +8,7 @@ import { Toaster } from "@/components/ui/toaster";
 import Home from "@/pages/home";
 import TranscriptionTest from "@/pages/transcription-test";
 import AdminDashboard from "@/pages/admin";
+import AudioTest from "@/pages/audio-test";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -16,6 +17,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/test" component={TranscriptionTest} />
       <Route path="/admin" component={AdminDashboard} />
+      <Route path="/audio-test" component={AudioTest} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -189,7 +189,7 @@ export const AudioPlayer: React.FC<AudioPlayerProps> = ({
       {/* Test page link */}
       <div className="mt-2">
         <a 
-          href="audio-samples/test.html" 
+          href="/audio-test" 
           target="_blank" 
           rel="noopener noreferrer" 
           className="text-xs text-blue-500 hover:underline"
