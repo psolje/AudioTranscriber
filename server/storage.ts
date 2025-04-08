@@ -116,7 +116,7 @@ export class MemStorage implements IStorage {
         
         this.createAudioSample({
           title: title,
-          path: `/audio-samples/${file}`,
+          path: `audio-samples/${file}`,  // Remove leading slash for consistent path handling
           transcript: transcript,
           duration: duration,
         });
@@ -234,7 +234,11 @@ export class MemStorage implements IStorage {
     // Ensure sampleIds is properly converted to a number array
     let sampleIds: number[] = [];
     if (Array.isArray(session.sampleIds)) {
-      sampleIds = session.sampleIds.map(id => typeof id === 'number' ? id : parseInt(id.toString()));
+      sampleIds = session.sampleIds.map((idVal: any) => {
+        if (typeof idVal === 'number') return idVal;
+        if (typeof idVal === 'string') return parseInt(idVal);
+        return 0; // fallback
+      }).filter(idVal => !isNaN(idVal)); // Filter out any NaN values
     }
     
     const testSession: TestSession = { 

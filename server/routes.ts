@@ -276,8 +276,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Duration must be a number" });
       }
 
-      // Format path for storage - make it relative to the public directory
-      const filePath = `/audio-samples/${req.file.filename}`;
+      // Format path for storage - make it relative without leading slash
+      const filePath = `audio-samples/${req.file.filename}`;
       
       const audioSample = await storage.createAudioSample({
         title,
