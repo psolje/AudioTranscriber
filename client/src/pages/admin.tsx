@@ -4,9 +4,12 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/context/auth-context";
 import { AdminTable } from "@/components/admin/admin-table";
 import { UserDetailsModal } from "@/components/admin/user-details-modal";
+import { AudioSamplesManager } from "@/components/admin/audio-samples-manager";
 import { Button } from "@/components/ui/button";
-import { LogOut } from "lucide-react";
+import { LogOut, User, Database, Info } from "lucide-react";
 import { resultsToCSV, detailedResultToCSV, downloadCSV } from "@/lib/utils/csv-export";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface UserResult {
   id: number;
@@ -205,22 +208,50 @@ const AdminDashboard: React.FC = () => {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        {isLoading || isFilterLoading ? (
-          <div className="flex justify-center py-10">
-            <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        ) : (
-          <AdminTable
-            results={formatResultsForTable()}
-            onViewDetails={handleViewDetails}
-            onExportCSV={handleExportCSV}
-            onFilter={handleFilter}
-            totalResults={sessionsData?.count || 0}
-            currentPage={currentPage}
-            onPageChange={handlePageChange}
-            perPage={perPage}
-          />
-        )}
+        {/* Admin Credentials Info */}
+        <Alert className="mb-6 border-primary/20 bg-primary/5">
+          <Info className="h-5 w-5 text-primary" />
+          <AlertTitle>Admin Credentials</AlertTitle>
+          <AlertDescription>
+            <strong>Email:</strong> admin@example.com | <strong>Password:</strong> admin123
+          </AlertDescription>
+        </Alert>
+        
+        <Tabs defaultValue="results" className="mb-6">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="results">
+              <User className="mr-2 h-4 w-4" />
+              Test Results
+            </TabsTrigger>
+            <TabsTrigger value="audio">
+              <Database className="mr-2 h-4 w-4" />
+              Audio Samples
+            </TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="results" className="mt-6">
+            {isLoading || isFilterLoading ? (
+              <div className="flex justify-center py-10">
+                <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            ) : (
+              <AdminTable
+                results={formatResultsForTable()}
+                onViewDetails={handleViewDetails}
+                onExportCSV={handleExportCSV}
+                onFilter={handleFilter}
+                totalResults={sessionsData?.count || 0}
+                currentPage={currentPage}
+                onPageChange={handlePageChange}
+                perPage={perPage}
+              />
+            )}
+          </TabsContent>
+          
+          <TabsContent value="audio" className="mt-6">
+            <AudioSamplesManager />
+          </TabsContent>
+        </Tabs>
         
         {/* User Details Modal */}
         <UserDetailsModal

@@ -23,6 +23,7 @@ export interface IStorage {
   getAudioSamples(): Promise<AudioSample[]>;
   getAudioSample(id: number): Promise<AudioSample | undefined>;
   createAudioSample(sample: InsertAudioSample): Promise<AudioSample>;
+  deleteAudioSample(id: number): Promise<void>;
   getRandomAudioSamples(count: number): Promise<AudioSample[]>;
 
   // Transcription result operations
@@ -179,7 +180,14 @@ export class MemStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const id = this.currentUserId++;
-    const user: User = { ...insertUser, id, createdAt: new Date() };
+    const user: User = { 
+      id, 
+      name: insertUser.name,
+      email: insertUser.email,
+      isAdmin: insertUser.isAdmin || false,
+      password: insertUser.password || null,
+      createdAt: new Date() 
+    };
     this.users.set(id, user);
     return user;
   }
@@ -208,6 +216,13 @@ export class MemStorage implements IStorage {
     return audioSample;
   }
 
+  async deleteAudioSample(id: number): Promise<void> {
+    if (!this.audioSamples.has(id)) {
+      throw new Error(`Audio sample with ID ${id} not found`);
+    }
+    this.audioSamples.delete(id);
+  }
+  
   async getRandomAudioSamples(count: number): Promise<AudioSample[]> {
     const samples = Array.from(this.audioSamples.values());
     const shuffled = [...samples].sort(() => 0.5 - Math.random());
@@ -257,8 +272,10 @@ export class MemStorage implements IStorage {
   async createTestSession(session: InsertTestSession): Promise<TestSession> {
     const id = this.currentSessionId++;
     const testSession: TestSession = { 
-      ...session, 
-      id, 
+      id,
+      userId: session.userId,
+      testMode: session.testMode,
+      sampleIds: Array.isArray(session.sampleIds) ? session.sampleIds : [],
       avgAccuracy: null, 
       avgWpm: null,
       completed: false,

@@ -6,11 +6,48 @@ import {
   insertTranscriptionResultSchema,
   insertTestSessionSchema,
   updateTestSessionSchema,
+  insertAudioSampleSchema,
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Configure multer for audio file uploads
+  const storage_dir = './public/audio-samples';
+  
+  // Create directory if it doesn't exist
+  if (!fs.existsSync(storage_dir)) {
+    fs.mkdirSync(storage_dir, { recursive: true });
+  }
+  
+  const audioStorage = multer.diskStorage({
+    destination: (_req, _file, cb) => {
+      cb(null, storage_dir);
+    },
+    filename: (_req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
+  });
+  
+  const upload = multer({ 
+    storage: audioStorage,
+    limits: {
+      fileSize: 10 * 1024 * 1024, // 10MB limit
+    },
+    fileFilter: (_req, file, cb) => {
+      // Accept only audio files
+      if (file.mimetype.startsWith('audio/')) {
+        cb(null, true);
+      } else {
+        cb(new Error('Only audio files are allowed'));
+      }
+    }
+  });
+
   // Helper function to handle validation errors
   const validateRequest = (schema: any, data: any) => {
     try {
@@ -217,6 +254,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       res.status(500).json({ message: "Error fetching test session details" });
     }
+  });
+
+  // Admin audio sample management
+  app.post("/api/admin/audio-samples", upload.single('audioFile'), async (req: Request, res: Response) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No audio file uploaded" });
+      }
+
+      const { title, transcript, duration } = req.body;
+      
+      if (!title || !transcript || !duration) {
+        return res.status(400).json({ 
+          message: "Title, transcript, and duration are required" 
+        });
+      }
+
+      const durationNum = parseInt(duration);
+      if (isNaN(durationNum)) {
+        return res.status(400).json({ message: "Duration must be a number" });
+      }
+
+      // Format path for storage - make it relative to the public directory
+      const filePath = `/audio-samples/${req.file.filename}`;
+      
+      const audioSample = await storage.createAudioSample({
+        title,
+        path: filePath,
+        transcript,
+        duration: durationNum
+      });
+      
+      res.status(201).json(audioSample);
+    } catch (error) {
+      console.error("Error uploading audio:", error);
+      res.status(500).json({ 
+        message: "Error uploading audio sample",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  // Delete audio sample
+  app.delete("/api/admin/audio-samples/:id", async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid sample ID" });
+    }
+
+    try {
+      const sample = await storage.getAudioSample(id);
+      if (!sample) {
+        return res.status(404).json({ message: "Audio sample not found" });
+      }
+
+      // Delete file from disk
+      const filePath = path.join('./public', sample.path);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+
+      // Delete from storage
+      await storage.deleteAudioSample(id);
+      
+      res.status(200).json({ message: "Audio sample deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ 
+        message: "Error deleting audio sample",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  // Get admin credentials
+  app.get("/api/admin/credentials", (_req: Request, res: Response) => {
+    res.status(200).json({
+      email: "admin@example.com",
+      password: "admin123"
+    });
   });
 
   const httpServer = createServer(app);
