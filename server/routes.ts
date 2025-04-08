@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import express, { type Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import {
@@ -16,6 +16,8 @@ import fs from "fs";
 import { convertToMP3, isMP3, getAudioDuration } from "./audio-utils";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Serve static audio files from public/audio-samples
+  app.use('/audio-samples', express.static(path.join('./public/audio-samples')));
   // Configure multer for audio file uploads
   const storage_dir = './public/audio-samples';
   
