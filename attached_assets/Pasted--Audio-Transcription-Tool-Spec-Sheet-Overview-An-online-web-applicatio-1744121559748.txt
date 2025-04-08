@@ -1,0 +1,153 @@
+### **Audio Transcription Tool - Spec Sheet**
+
+---
+
+#### **Overview:**
+An online web application designed to test and evaluate transcribing skills. The tool involves playing random audio files to the user, who has a set time to transcribe it. The tool evaluates the transcription based on accuracy and typing speed (Words Per Minute or WPM). The application also includes an admin dashboard for monitoring and downloading candidate results.
+
+---
+
+#### **Primary Requirements:**
+1. **Random Audio Selection**: A series of 5 to 15 audio samples are randomly selected for transcription.
+2. **Timer**: A set amount of time is given for the user to complete each transcription.
+3. **Scoring Metrics**: Users are graded on accuracy and WPM.
+4. **Admin Dashboard**: Admin can view and download candidate scores (in CSV format).
+5. **Database**: Transcription entries are stored, including user scores, audio files, and transcriptions.
+
+---
+
+### **Tech Stack**
+
+#### **Frontend:**
+- **Framework**: React.js
+- **State Management**: Redux or React Context API
+- **UI Libraries**:
+  - Material-UI or Ant Design for pre-built components (buttons, tables, forms).
+  - Tailwind CSS for custom layouts and responsive design.
+- **Audio Handling**:
+  - HTML5 `<audio>` for audio playback.
+  - Optional: **Howler.js** or **WaveSurfer.js** for enhanced audio control (playback speed, waveforms, etc.).
+- **Real-time Feedback**:
+  - WebSockets (via **Socket.io**) for real-time feedback on transcription progress, accuracy, and WPM.
+
+#### **Backend:**
+- **Platform**: Node.js with **Express.js** for routing and API endpoints.
+- **Database**:
+  - **MongoDB** (NoSQL) or **PostgreSQL** (SQL) for storing user profiles, scores, transcription attempts, and audio metadata.
+- **Authentication**:
+  - **JWT (JSON Web Tokens)** for secure user and admin login.
+- **Speech-to-Text** (Optional):
+  - **Google Cloud Speech-to-Text API** or **Microsoft Azure Speech-to-Text API** for automatic transcription suggestion (if required).
+- **WPM and Accuracy Calculation**:
+  - Custom logic for calculating WPM (based on time and words typed).
+  - Use **Levenshtein distance** or **Damerau-Levenshtein distance** algorithms for comparing transcriptions and calculating accuracy.
+
+#### **Admin Dashboard**:
+- **Framework**: React.js with Material-UI or Ant Design.
+- **Features**:
+  - View and search user test results.
+  - Filter by user data, scores, and test completion status.
+  - **CSV Export**: Use **PapaParse** for exporting results into CSV format.
+  - Admin role authentication with JWT.
+
+---
+
+### **Features and Functionalities**
+
+#### **User Side**:
+1. **Audio Player**: 
+   - Plays random audio files.
+   - Options for playback control (play, pause, volume, restart).
+   - Optional: Show waveform with **WaveSurfer.js**.
+2. **Transcription Box**:
+   - A text area where users manually type the transcription.
+   - Real-time tracking of transcription progress.
+   - Keyboard shortcuts (play/pause, rewind).
+3. **Timer**:
+   - Countdown timer for each transcription session.
+   - Visible feedback for users about remaining time.
+4. **Scoring**:
+   - Words Per Minute (WPM) calculation based on the number of words typed and the time taken.
+   - Accuracy score based on character or word-level comparison with reference text.
+   - Display feedback on completion (WPM and accuracy).
+5. **Performance Tracking**:
+   - Display user’s performance after every transcription, showing WPM and accuracy.
+   - Real-time typing speed and accuracy feedback.
+
+#### **Admin Side**:
+1. **Admin Dashboard**:
+   - Admin login page secured with JWT authentication.
+   - View all users’ transcription results (scores, WPM, accuracy).
+   - Search and filter user results by score, test case, etc.
+   - Download reports in CSV format.
+2. **CSV Export**:
+   - Export test results, including user data (name, email), transcription scores, WPM, accuracy, and timestamps.
+
+---
+
+### **Technical Components**
+
+#### **Audio Handling:**
+- **Audio Playback**: 
+   - **HTML5 `<audio>`** for basic audio control.
+   - Optional: **Howler.js** for more advanced audio playback features (volume control, playback speed).
+   - Optional: **WaveSurfer.js** for visualizing audio waveforms.
+   
+#### **Transcription Mechanism:**
+- **Manual Transcription**: 
+   - Users listen to audio and manually type out the transcription.
+   - Typing progress is captured and validated with reference text.
+- **Automatic Transcription (Optional)**:
+   - **Google Cloud Speech-to-Text** or **Microsoft Azure Speech-to-Text** for providing transcription suggestions or baseline comparison (can be used to compare the user’s transcription accuracy).
+
+#### **Performance Metrics**:
+1. **Words Per Minute (WPM)**:
+   - Formula: 
+     \[
+     WPM = \frac{{\text{{words typed}}}}{{\text{{time taken in minutes}}}}
+     \]
+   - Real-time calculation of WPM during transcription.
+2. **Accuracy**:
+   - Use algorithms like **Levenshtein distance** to compare the user’s transcription against the reference text and calculate accuracy.
+   - **Accuracy Formula**:
+     \[
+     \text{{Accuracy}} = \left(\frac{{\text{{correct characters or words}}}}{{\text{{total characters or words}}}} \right) \times 100
+     \]
+
+#### **Admin Features**:
+- **Admin Dashboard**:
+   - Secure login for admins via JWT.
+   - View all users’ transcription data (scores, WPM, accuracy).
+   - Download results in CSV format.
+- **Exporting Results**:
+   - **PapaParse** for frontend CSV export or backend generation of downloadable CSV reports.
+
+---
+
+### **Authentication & Authorization**:
+- **Admin Authentication**: 
+  - JWT tokens for secure access to the admin panel.
+- **User Authentication**: 
+  - Optional user login using JWT for saving progress, scores, and history.
+- **Roles**:
+  - **Admin**: Access to all user results, CSV downloads, and system configuration.
+  - **User**: Access to transcription tests and personal performance metrics.
+
+---
+
+### **Additional Tools & Technologies**:
+- **Cloud Hosting**:
+   - **AWS**, **Heroku**, or **DigitalOcean** for hosting the web app and audio files.
+- **Audio Storage**:
+   - Store audio files on cloud services like **AWS S3** or a dedicated server.
+- **Real-time Communication**:
+   - **Socket.io** for real-time feedback on WPM and accuracy.
+- **CSV Export**:
+   - **PapaParse** for exporting results into CSV files.
+
+---
+
+### **Future Enhancements (Optional)**:
+- **User Rankings**: Leaderboards based on WPM and accuracy.
+- **Multi-language Support**: Add support for transcription in various languages.
+- **Mobile Optimization**: Optimize the application for mobile devices.
