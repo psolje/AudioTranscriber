@@ -174,7 +174,11 @@ export class DatabaseStorage implements IStorage {
 
   async verifyAdminCredentials(email: string, password: string): Promise<User | undefined> {
     const user = await this.getUserByEmail(email);
-    if (user && user.isAdmin && user.password === password) {
+    
+    // Import comparePasswords function
+    const { comparePasswords } = await import('./auth-utils');
+    
+    if (user && user.isAdmin && user.password && await comparePasswords(password, user.password)) {
       return user;
     }
     return undefined;

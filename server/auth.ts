@@ -2,12 +2,10 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import { Express } from "express";
 import session from "express-session";
-import { scrypt, randomBytes, timingSafeEqual } from "crypto";
-import { promisify } from "util";
-import { storage } from "./storage";
 import { User as SelectUser } from "@shared/schema";
 import connectPg from "connect-pg-simple";
 import { pool } from "./db";
+import { comparePasswords, hashPassword } from "./auth-utils";
 
 declare global {
   namespace Express {
@@ -15,32 +13,7 @@ declare global {
   }
 }
 
-const scryptAsync = promisify(scrypt);
 const PostgresSessionStore = connectPg(session);
-
-/**
- * Hash a password with scrypt and a random salt
- * @param password Plain text password
- * @returns Hashed password with salt in format: 'hash.salt'
- */
-async function hashPassword(password: string) {
-  const salt = randomBytes(16).toString("hex");
-  const buf = (await scryptAsync(password, salt, 64)) as Buffer;
-  return `${buf.toString("hex")}.${salt}`;
-}
-
-/**
- * Compare a supplied password with a stored hash
- * @param supplied Supplied plain text password
- * @param stored Stored hash with salt
- * @returns True if passwords match
- */
-async function comparePasswords(supplied: string, stored: string) {
-  const [hashed, salt] = stored.split(".");
-  const hashedBuf = Buffer.from(hashed, "hex");
-  const suppliedBuf = (await scryptAsync(supplied, salt, 64)) as Buffer;
-  return timingSafeEqual(hashedBuf, suppliedBuf);
-}
 
 /**
  * Set up authentication for the Express app
@@ -73,6 +46,8 @@ export function setupAuth(app: Express) {
       passwordField: 'password',
     }, async (email, password, done) => {
       try {
+        // Dynamically import storage to avoid circular dependencies
+        const { storage } = await import('./storage');
         const user = await storage.getUserByEmail(email);
         
         if (!user || !user.password) {
@@ -98,6 +73,8 @@ export function setupAuth(app: Express) {
   // Deserialize user from the session user ID
   passport.deserializeUser(async (id: number, done) => {
     try {
+      // Dynamically import storage to avoid circular dependencies
+      const { storage } = await import('./storage');
       const user = await storage.getUser(id);
       done(null, user);
     } catch (err) {
@@ -109,6 +86,9 @@ export function setupAuth(app: Express) {
   app.post("/api/register", async (req, res) => {
     try {
       const { email, name } = req.body;
+      
+      // Dynamically import storage to avoid circular dependencies
+      const { storage } = await import('./storage');
       
       // Check if user with email already exists
       const existingUser = await storage.getUserByEmail(email);
@@ -144,6 +124,9 @@ export function setupAuth(app: Express) {
       if (!password) {
         return res.status(400).json({ error: "Password is required for admin" });
       }
+      
+      // Dynamically import storage to avoid circular dependencies
+      const { storage } = await import('./storage');
       
       // Check if user with email already exists
       const existingUser = await storage.getUserByEmail(email);

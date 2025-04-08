@@ -98,9 +98,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Login mutation for regular users
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginCredentials) => {
-      const res = await apiRequest("POST", "/api/users", { 
-        name: credentials.email.split('@')[0], // Use part of email as name
-        email: credentials.email
+      const res = await apiRequest("POST", "/api/login", { 
+        email: credentials.email,
+        password: credentials.password || ""
       });
       return await res.json() as User;
     },
@@ -145,7 +145,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Registration mutation
   const registerMutation = useMutation({
     mutationFn: async (data: RegisterData) => {
-      const res = await apiRequest("POST", "/api/register", data);
+      const res = await apiRequest("POST", "/api/register", {
+        name: data.name,
+        email: data.email
+      });
       return await res.json() as User;
     },
     onSuccess: (userData: User) => {
