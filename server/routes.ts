@@ -7,6 +7,7 @@ import {
   insertTestSessionSchema,
   updateTestSessionSchema,
   insertAudioSampleSchema,
+  updateAudioSampleSchema,
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { fromZodError } from "zod-validation-error";
@@ -359,6 +360,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       res.status(500).json({ 
         message: "Error deleting audio sample",
+        error: (error as Error).message 
+      });
+    }
+  });
+
+  // Update audio sample (title and transcript)
+  app.patch("/api/admin/audio-samples/:id", async (req: Request, res: Response) => {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) {
+      return res.status(400).json({ message: "Invalid sample ID" });
+    }
+
+    const { data, error } = validateRequest(updateAudioSampleSchema, req.body);
+    if (error) return res.status(400).json({ message: error });
+
+    try {
+      const sample = await storage.getAudioSample(id);
+      if (!sample) {
+        return res.status(404).json({ message: "Audio sample not found" });
+      }
+
+      const updatedSample = await storage.updateAudioSample(id, data);
+      res.status(200).json(updatedSample);
+    } catch (error) {
+      console.error("Error updating audio sample:", error);
+      res.status(500).json({ 
+        message: "Error updating audio sample",
         error: (error as Error).message 
       });
     }
