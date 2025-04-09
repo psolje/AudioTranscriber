@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
-import { Route, Switch } from 'wouter';
+import React from 'react';
+import { Route, Switch, Link, useLocation } from 'wouter';
 import { Toaster } from '@/components/ui/toaster';
 
-// For now, directly import admin components while we're building the admin interface
+// Pages and components
 import { AudioSamplesManager } from '@/components/admin/audio-samples-manager';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import TestPage from '@/pages/test-page';
 
-// Placeholder components until we implement the full app
 const HomePage = () => {
+  const [, navigate] = useLocation();
+  
   return (
     <div className="container mx-auto px-4 py-8">
       <Card className="w-full max-w-4xl mx-auto">
@@ -27,8 +29,8 @@ const HomePage = () => {
           </ul>
         </CardContent>
         <CardFooter className="flex justify-between">
-          <Button variant="outline">Test Your Skills</Button>
-          <Button>View Admin Dashboard</Button>
+          <Button variant="outline" onClick={() => navigate('/test')}>Test Your Skills</Button>
+          <Button onClick={() => navigate('/admin')}>View Admin Dashboard</Button>
         </CardFooter>
       </Card>
     </div>
@@ -60,6 +62,8 @@ const NotFound = () => {
 };
 
 function App() {
+  const [location] = useLocation();
+  
   return (
     <div className="min-h-screen">
       <header className="bg-primary py-4">
@@ -68,10 +72,28 @@ function App() {
           <nav>
             <ul className="flex space-x-4">
               <li>
-                <a href="/" className="text-white hover:text-primary-foreground">Home</a>
+                <Link 
+                  href="/" 
+                  className={`text-white hover:text-primary-foreground ${location === '/' ? 'font-bold border-b-2 border-white' : ''}`}
+                >
+                  Home
+                </Link>
               </li>
               <li>
-                <a href="/admin" className="text-white hover:text-primary-foreground">Admin</a>
+                <Link 
+                  href="/test" 
+                  className={`text-white hover:text-primary-foreground ${location === '/test' ? 'font-bold border-b-2 border-white' : ''}`}
+                >
+                  Test Skills
+                </Link>
+              </li>
+              <li>
+                <Link 
+                  href="/admin" 
+                  className={`text-white hover:text-primary-foreground ${location === '/admin' ? 'font-bold border-b-2 border-white' : ''}`}
+                >
+                  Admin
+                </Link>
               </li>
             </ul>
           </nav>
@@ -82,6 +104,7 @@ function App() {
         <Switch>
           <Route path="/" component={HomePage} />
           <Route path="/admin" component={AdminPage} />
+          <Route path="/test" component={TestPage} />
           <Route component={NotFound} />
         </Switch>
       </main>

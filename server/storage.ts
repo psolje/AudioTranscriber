@@ -266,7 +266,7 @@ export class DatabaseStorage implements IStorage {
     const results = await db
       .select()
       .from(transcriptionResults)
-      .where(eq(transcriptionResults.sessionId, sessionId));
+      .where(eq(transcriptionResults.testSessionId, sessionId));
 
     const resultDetails: TestResultWithDetails[] = [];
     

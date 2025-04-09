@@ -49,6 +49,7 @@ export const transcriptionResults = pgTable("transcription_results", {
   accuracy: integer("accuracy").notNull(), // Percentage (0-100)
   wpm: integer("wpm").notNull(), // Words per minute
   timeTaken: integer("time_taken").notNull(), // Time in seconds
+  testSessionId: integer("test_session_id"), // Optional link to test session
   testDate: timestamp("test_date").defaultNow().notNull(),
 });
 
@@ -59,6 +60,7 @@ export const insertTranscriptionResultSchema = createInsertSchema(transcriptionR
   accuracy: true,
   wpm: true,
   timeTaken: true,
+  testSessionId: true,
 });
 
 // Test session model
