@@ -1,6 +1,7 @@
 import express, { type Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { setupAuth } from "./auth";
 import {
   insertUserSchema,
   insertTranscriptionResultSchema,
@@ -17,6 +18,16 @@ import fs from "fs";
 import { convertToMP3, isMP3, getAudioDuration } from "./audio-utils";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Set up authentication and session routes
+  setupAuth(app);
+  
+  // Admin route middleware to ensure authentication
+  const isAdmin = (req: Request, res: Response, next: Function) => {
+    if (!req.isAuthenticated() || !req.user?.isAdmin) {
+      return res.status(401).json({ message: "Not authenticated as admin" });
+    }
+    next();
+  };
   // Serve static audio files from public/audio-samples
   app.use('/audio-samples', express.static(path.join('./public/audio-samples')));
   // Configure multer for audio file uploads

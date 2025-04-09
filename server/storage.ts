@@ -32,6 +32,7 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  updateUserPassword(userId: number, newPassword: string): Promise<void>;
   verifyAdminCredentials(email: string, password: string): Promise<User | undefined>;
 
   // Audio sample operations
@@ -172,12 +173,27 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
+  async updateUserPassword(userId: number, newPassword: string): Promise<void> {
+    await db
+      .update(users)
+      .set({ password: newPassword })
+      .where(eq(users.id, userId));
+  }
+
   async verifyAdminCredentials(email: string, password: string): Promise<User | undefined> {
     const user = await this.getUserByEmail(email);
     if (user && user.isAdmin && user.password === password) {
       return user;
     }
     return undefined;
+  }
+  
+  async deleteAllTestSessions(): Promise<void> {
+    // First delete all transcription results
+    await db.delete(transcriptionResults);
+    
+    // Then delete all test sessions
+    await db.delete(testSessions);
   }
 
   // Audio sample operations

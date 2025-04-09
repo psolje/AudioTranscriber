@@ -1,12 +1,15 @@
 import React from 'react';
 import { Route, Switch, Link, useLocation } from 'wouter';
 import { Toaster } from '@/components/ui/toaster';
+import { AdminAuthProvider } from '@/hooks/use-admin-auth';
+import { AdminProtectedRoute } from '@/components/admin/protected-route';
 
 // Pages and components
-import { AudioSamplesManager } from '@/components/admin/audio-samples-manager';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import TestPage from '@/pages/test-page';
+import AdminLoginPage from '@/pages/admin/login-page';
+import AdminDashboardPage from '@/pages/admin/dashboard-page';
 
 const HomePage = () => {
   const [, navigate] = useLocation();
@@ -37,20 +40,6 @@ const HomePage = () => {
   );
 };
 
-const AdminPage = () => {
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <Card className="w-full mb-8">
-        <CardHeader>
-          <CardTitle className="text-2xl font-bold">Admin Dashboard</CardTitle>
-          <CardDescription>Manage your audio transcription database</CardDescription>
-        </CardHeader>
-      </Card>
-      <AudioSamplesManager />
-    </div>
-  );
-};
-
 const NotFound = () => {
   return (
     <div className="flex flex-col items-center justify-center min-h-[80vh]">
@@ -65,58 +54,65 @@ function App() {
   const [location] = useLocation();
   
   return (
-    <div className="min-h-screen">
-      <header className="bg-primary py-4">
-        <div className="container mx-auto px-4 flex justify-between items-center">
-          <h1 className="text-white text-2xl font-bold">Audio Transcription Tool</h1>
-          <nav>
-            <ul className="flex space-x-4">
-              <li>
-                <Link 
-                  href="/" 
-                  className={`text-white hover:text-primary-foreground ${location === '/' ? 'font-bold border-b-2 border-white' : ''}`}
-                >
-                  Home
-                </Link>
-              </li>
-              <li>
-                <Link 
-                  href="/test" 
-                  className={`text-white hover:text-primary-foreground ${location === '/test' ? 'font-bold border-b-2 border-white' : ''}`}
-                >
-                  Test Skills
-                </Link>
-              </li>
-              <li>
-                <Link 
-                  href="/admin" 
-                  className={`text-white hover:text-primary-foreground ${location === '/admin' ? 'font-bold border-b-2 border-white' : ''}`}
-                >
-                  Admin
-                </Link>
-              </li>
-            </ul>
-          </nav>
-        </div>
-      </header>
+    <AdminAuthProvider>
+      <div className="min-h-screen">
+        <header className="bg-primary py-4">
+          <div className="container mx-auto px-4 flex justify-between items-center">
+            <h1 className="text-white text-2xl font-bold">Audio Transcription Tool</h1>
+            <nav>
+              <ul className="flex space-x-4">
+                <li>
+                  <Link 
+                    href="/" 
+                    className={`text-white hover:text-primary-foreground ${location === '/' ? 'font-bold border-b-2 border-white' : ''}`}
+                  >
+                    Home
+                  </Link>
+                </li>
+                <li>
+                  <Link 
+                    href="/test" 
+                    className={`text-white hover:text-primary-foreground ${location === '/test' ? 'font-bold border-b-2 border-white' : ''}`}
+                  >
+                    Test Skills
+                  </Link>
+                </li>
+                <li>
+                  <Link 
+                    href="/admin" 
+                    className={`text-white hover:text-primary-foreground ${location.startsWith('/admin') ? 'font-bold border-b-2 border-white' : ''}`}
+                  >
+                    Admin
+                  </Link>
+                </li>
+              </ul>
+            </nav>
+          </div>
+        </header>
 
-      <main>
-        <Switch>
-          <Route path="/" component={HomePage} />
-          <Route path="/admin" component={AdminPage} />
-          <Route path="/test" component={TestPage} />
-          <Route component={NotFound} />
-        </Switch>
-      </main>
+        <main>
+          <Switch>
+            <Route path="/" component={HomePage} />
+            <Route path="/admin">
+              <AdminProtectedRoute>
+                <AdminDashboardPage />
+              </AdminProtectedRoute>
+            </Route>
+            <Route path="/admin/login" component={AdminLoginPage} />
+            <Route path="/test" component={TestPage} />
+            <Route component={NotFound} />
+          </Switch>
+        </main>
 
-      <footer className="bg-muted py-4 mt-8">
-        <div className="container mx-auto px-4 text-center text-muted-foreground">
-          &copy; {new Date().getFullYear()} Audio Transcription Tool
-        </div>
-      </footer>
-      
-      <Toaster />
-    </div>
+        <footer className="bg-muted py-4 mt-8">
+          <div className="container mx-auto px-4 text-center text-muted-foreground">
+            &copy; {new Date().getFullYear()} Audio Transcription Tool
+          </div>
+        </footer>
+        
+        <Toaster />
+      </div>
+    </AdminAuthProvider>
   );
 }
 
