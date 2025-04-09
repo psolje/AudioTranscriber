@@ -6,8 +6,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger, DialogClose } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useToast } from "@/hooks/use-toast";
 import { 
   Loader2, Settings as SettingsIcon, FileText as FileTextIcon, 
   Download as DownloadIcon, RefreshCw as RefreshCwIcon,
@@ -17,18 +18,383 @@ import {
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 
-// This would be a real component in a full implementation
-const AudioSamplesManager = () => (
-  <Card>
-    <CardHeader>
-      <CardTitle>Audio Samples Manager</CardTitle>
-      <CardDescription>Manage audio samples for transcription tests</CardDescription>
-    </CardHeader>
-    <CardContent>
-      <p>Audio samples management UI would go here.</p>
-    </CardContent>
-  </Card>
-);
+// Audio Samples Manager Component
+const AudioSamplesManager = () => {
+  const [samples, setSamples] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [editSampleId, setEditSampleId] = useState<number | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editTranscript, setEditTranscript] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [newTitle, setNewTitle] = useState("");
+  const [newTranscript, setNewTranscript] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const { toast } = useToast();
+  
+  // Fetch audio samples
+  useQuery({
+    queryKey: ["/api/audio-samples"],
+    queryFn: async () => {
+      setIsLoading(true);
+      try {
+        const res = await fetch("/api/audio-samples");
+        if (!res.ok) throw new Error("Failed to fetch audio samples");
+        const data = await res.json();
+        setSamples(data);
+        return data;
+      } catch (error) {
+        console.error("Error fetching audio samples:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load audio samples",
+          variant: "destructive",
+        });
+        return [];
+      } finally {
+        setIsLoading(false);
+      }
+    },
+  });
+  
+  // Delete audio sample mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("DELETE", `/api/admin/audio-samples/${id}`);
+      return await res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Sample deleted",
+        description: "Audio sample has been deleted successfully",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/audio-samples"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Delete failed",
+        description: error.message || "Failed to delete audio sample",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Update audio sample mutation
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: any }) => {
+      const res = await apiRequest("PATCH", `/api/admin/audio-samples/${id}`, data);
+      return await res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Sample updated",
+        description: "Audio sample has been updated successfully",
+      });
+      setEditSampleId(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/audio-samples"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Update failed",
+        description: error.message || "Failed to update audio sample",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Upload audio sample mutation
+  const uploadMutation = useMutation({
+    mutationFn: async (formData: FormData) => {
+      const res = await fetch("/api/admin/audio-samples", {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to upload audio sample");
+      }
+      return await res.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Sample uploaded",
+        description: "Audio sample has been uploaded successfully",
+      });
+      setUploadOpen(false);
+      setFile(null);
+      setNewTitle("");
+      setNewTranscript("");
+      queryClient.invalidateQueries({ queryKey: ["/api/audio-samples"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Upload failed",
+        description: error.message || "Failed to upload audio sample",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  // Handle edit save
+  const handleSaveEdit = async (id: number) => {
+    setIsSubmitting(true);
+    try {
+      await updateMutation.mutateAsync({
+        id,
+        data: { title: editTitle, transcript: editTranscript },
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+  
+  // Handle file selection
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
+    }
+  };
+  
+  // Handle sample upload
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!file) {
+      toast({
+        title: "No file selected",
+        description: "Please select an audio file to upload",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const formData = new FormData();
+    formData.append("audioFile", file);
+    formData.append("title", newTitle || file.name);
+    formData.append("transcript", newTranscript);
+    
+    setIsUploading(true);
+    try {
+      await uploadMutation.mutateAsync(formData);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+  
+  // Start editing sample
+  const startEdit = (sample: any) => {
+    setEditSampleId(sample.id);
+    setEditTitle(sample.title);
+    setEditTranscript(sample.transcript);
+  };
+  
+  // Cancel editing
+  const cancelEdit = () => {
+    setEditSampleId(null);
+  };
+  
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex justify-between items-center">
+          <div>
+            <CardTitle>Audio Samples Manager</CardTitle>
+            <CardDescription>Manage audio samples for transcription tests</CardDescription>
+          </div>
+          <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+            <Button onClick={() => setUploadOpen(true)}>
+              Upload New Sample
+            </Button>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Upload Audio Sample</DialogTitle>
+                <DialogDescription>
+                  Upload a new audio file for transcription testing. Supported formats: MP3, WAV.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleUpload} className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="audio-file">Audio File</Label>
+                  <Input
+                    id="audio-file"
+                    type="file"
+                    accept="audio/*"
+                    onChange={handleFileChange}
+                    required
+                  />
+                  {file && (
+                    <p className="text-xs text-muted-foreground">
+                      Selected file: {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="title">Title (optional)</Label>
+                  <Input
+                    id="title"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    placeholder="Sample title (defaults to filename)"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="transcript">Transcript</Label>
+                  <textarea
+                    id="transcript"
+                    className="min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    value={newTranscript}
+                    onChange={(e) => setNewTranscript(e.target.value)}
+                    placeholder="Enter the correct transcript for this audio"
+                    required
+                  />
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setUploadOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={isUploading || !file || !newTranscript}>
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      "Upload Sample"
+                    )}
+                  </Button>
+                </DialogFooter>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="py-8 text-center">
+            <Loader2 className="w-8 h-8 mx-auto animate-spin text-primary" />
+            <p className="mt-2 text-muted-foreground">Loading audio samples...</p>
+          </div>
+        ) : samples.length === 0 ? (
+          <div className="text-center py-8 border rounded-md">
+            <FileIcon className="w-12 h-12 mx-auto text-muted-foreground/60" />
+            <p className="mt-2 text-muted-foreground">No audio samples found</p>
+            <Button variant="outline" className="mt-4" onClick={() => setUploadOpen(true)}>
+              Upload First Sample
+            </Button>
+          </div>
+        ) : (
+          <div className="border rounded-md overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Transcript</TableHead>
+                  <TableHead className="text-center">Duration</TableHead>
+                  <TableHead className="text-center">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {samples.map((sample) => (
+                  <TableRow key={sample.id}>
+                    {editSampleId === sample.id ? (
+                      // Edit mode
+                      <>
+                        <TableCell>
+                          <Input
+                            value={editTitle}
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            className="max-w-[200px]"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <textarea
+                            value={editTranscript}
+                            onChange={(e) => setEditTranscript(e.target.value)}
+                            className="w-full min-h-[60px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {sample.duration ? `${sample.duration.toFixed(1)}s` : "N/A"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-center gap-2">
+                            <Button 
+                              size="sm" 
+                              onClick={() => handleSaveEdit(sample.id)}
+                              disabled={isSubmitting}
+                            >
+                              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={cancelEdit}>
+                              Cancel
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </>
+                    ) : (
+                      // View mode
+                      <>
+                        <TableCell>
+                          <div className="font-medium">{sample.title}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {sample.path.split('/').pop()}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="max-h-[100px] overflow-y-auto">
+                            {sample.transcript}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {sample.duration ? `${sample.duration.toFixed(1)}s` : "N/A"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex justify-center gap-2">
+                            <Button size="sm" variant="outline" onClick={() => startEdit(sample)}>
+                              Edit
+                            </Button>
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button size="sm" variant="destructive">
+                                  Delete
+                                </Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Confirm Deletion</DialogTitle>
+                                  <DialogDescription>
+                                    Are you sure you want to delete "{sample.title}"? This action cannot be undone.
+                                  </DialogDescription>
+                                </DialogHeader>
+                                <DialogFooter>
+                                  <DialogClose asChild>
+                                    <Button variant="outline">Cancel</Button>
+                                  </DialogClose>
+                                  <Button 
+                                    variant="destructive" 
+                                    onClick={() => deleteMutation.mutate(sample.id)}
+                                    disabled={deleteMutation.isPending}
+                                  >
+                                    {deleteMutation.isPending ? "Deleting..." : "Delete"}
+                                  </Button>
+                                </DialogFooter>
+                              </DialogContent>
+                            </Dialog>
+                          </div>
+                        </TableCell>
+                      </>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
 
 export default function AdminDashboardPage() {
   const { admin, logoutMutation, updatePasswordMutation } = useAdminAuth();
@@ -305,14 +671,12 @@ export default function AdminDashboardPage() {
                       )}
                     </Button>
                     <Dialog>
-                      <Button 
-                        variant="destructive"
-                        onClick={() => document.getElementById('delete-reports-dialog')?.click()}
-                      >
-                        <TrashIcon className="w-4 h-4 mr-2" />
-                        Clean Reports
-                      </Button>
-                      <button id="delete-reports-dialog" style={{ display: 'none' }}></button>
+                      <DialogTrigger asChild>
+                        <Button variant="destructive">
+                          <TrashIcon className="w-4 h-4 mr-2" />
+                          Clean Reports
+                        </Button>
+                      </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
                           <DialogTitle>Confirm Deletion</DialogTitle>
@@ -321,7 +685,9 @@ export default function AdminDashboardPage() {
                           </DialogDescription>
                         </DialogHeader>
                         <DialogFooter>
-                          <Button variant="outline" onClick={() => {}}>Cancel</Button>
+                          <DialogClose asChild>
+                            <Button variant="outline">Cancel</Button>
+                          </DialogClose>
                           <Button 
                             variant="destructive" 
                             onClick={() => cleanReportsMutation.mutate()}
