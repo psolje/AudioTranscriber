@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { normalizeText, formatTime, getAccuracyColor } from '@/lib/utils';
-import { Play, Pause, SkipForward, Clock, Check, X, Award, Loader2 } from 'lucide-react';
+import { Play, Pause, SkipForward, Clock, Check, X, Award, Loader2, PlayCircle } from 'lucide-react';
 import { apiRequest } from '@/lib/queryClient';
 
 interface AudioSample {
@@ -55,6 +55,9 @@ const TestPage = () => {
   const [testSession, setTestSession] = useState<TestSession | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
+  const [playCount, setPlayCount] = useState(0);
+  const [audioEnded, setAudioEnded] = useState(false);
+  const [audioDuration, setAudioDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number | null>(null);
@@ -93,6 +96,17 @@ const TestPage = () => {
       setCurrentSample(samples[currentIndex]);
     }
   }, [samples, currentIndex]);
+  
+  // Show notification when play count reaches limit
+  useEffect(() => {
+    if (playCount === 2 && isStarted && !isComplete) {
+      toast({
+        title: "Playback limit reached",
+        description: "You've used your 2 plays for this sample. Please submit your transcription.",
+        variant: "default",
+      });
+    }
+  }, [playCount, isStarted, isComplete, toast]);
 
   // Timer for tracking transcription time
   useEffect(() => {
@@ -113,10 +127,25 @@ const TestPage = () => {
   // Handle audio playback control
   const togglePlayPause = () => {
     if (audioRef.current) {
+      // Don't allow playing if already played twice
+      if (!isPlaying && playCount >= 2) {
+        toast({
+          title: "Playback limit reached",
+          description: "You can only play the audio twice. Please provide your transcription now.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       if (isPlaying) {
         audioRef.current.pause();
       } else {
-        audioRef.current.play();
+        audioRef.current.play().then(() => {
+          // Increment play count only on successful play
+          if (!isPlaying) {
+            setPlayCount(prevCount => prevCount + 1);
+          }
+        }).catch(e => console.error('Play failed:', e));
       }
       setIsPlaying(!isPlaying);
     }
@@ -129,6 +158,7 @@ const TestPage = () => {
 
     const handleEnded = () => {
       setIsPlaying(false);
+      setAudioEnded(true);
     };
 
     const handlePlay = () => {
@@ -138,17 +168,32 @@ const TestPage = () => {
     const handlePause = () => {
       setIsPlaying(false);
     };
+    
+    const handleLoadedMetadata = () => {
+      setAudioDuration(audioElement.duration);
+    };
+    
+    // Reset play count and audio ended status when sample changes
+    setPlayCount(0);
+    setAudioEnded(false);
+    
+    // Set duration if already loaded
+    if (audioElement.readyState >= 1) {
+      setAudioDuration(audioElement.duration);
+    }
 
     audioElement.addEventListener('ended', handleEnded);
     audioElement.addEventListener('play', handlePlay);
     audioElement.addEventListener('pause', handlePause);
+    audioElement.addEventListener('loadedmetadata', handleLoadedMetadata);
 
     return () => {
       audioElement.removeEventListener('ended', handleEnded);
       audioElement.removeEventListener('play', handlePlay);
       audioElement.removeEventListener('pause', handlePause);
+      audioElement.removeEventListener('loadedmetadata', handleLoadedMetadata);
     };
-  }, [currentSample]);
+  }, [currentSample, toast]);
 
   // Calculate Levenshtein distance between two strings (for accuracy)
   const calculateLevenshteinDistance = (a: string, b: string): number => {
@@ -502,6 +547,8 @@ const TestPage = () => {
               <ul className="list-disc pl-5 space-y-1">
                 <li>You will be presented with {samples.length} audio samples to transcribe.</li>
                 <li>Listen carefully and type exactly what you hear.</li>
+                <li><strong>Important:</strong> You can only play each audio sample twice.</li>
+                <li>A timer will track how long you take compared to the audio duration.</li>
                 <li>Your accuracy and typing speed (WPM) will be measured.</li>
                 <li>Try to be as accurate as possible while maintaining good speed.</li>
                 <li>Use proper punctuation and capitalization as you hear it.</li>
@@ -547,14 +594,19 @@ const TestPage = () => {
               Sample {currentIndex + 1} of {samples.length}
             </CardTitle>
             <div className="flex items-center space-x-2">
-              <Badge variant="outline" className="flex items-center">
+              <Badge variant="outline" className={`flex items-center ${elapsedTime > audioDuration ? 'bg-red-100' : ''}`}>
                 <Clock className="mr-1 h-4 w-4" />
                 {formatTime(elapsedTime)}
+                {audioDuration > 0 && ` / ${formatTime(audioDuration)}`}
+              </Badge>
+              <Badge variant={playCount >= 2 ? "destructive" : "secondary"} className="flex items-center">
+                <PlayCircle className="mr-1 h-4 w-4" />
+                {playCount}/2 plays
               </Badge>
             </div>
           </div>
           <CardDescription>
-            Listen to the audio and transcribe what you hear
+            Listen to the audio and transcribe what you hear. You can only play the audio twice.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -572,7 +624,8 @@ const TestPage = () => {
                     variant="outline"
                     size="sm"
                     onClick={togglePlayPause}
-                    className="flex items-center"
+                    disabled={!isPlaying && playCount >= 2}
+                    className={`flex items-center ${!isPlaying && playCount >= 2 ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
                     {isPlaying ? (
                       <>
